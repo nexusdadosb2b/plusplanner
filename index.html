@@ -115,7 +115,8 @@
             }
           } catch (err) {
             console.error("Auth error:", err);
-            setErrorMsg("Falha na autenticação do Firebase. Verifique suas chaves.");
+            // Mostra o erro exato do Firebase na tela para facilitar a correção
+            setErrorMsg(`Erro de Auth: ${err.code || err.message}. Verifique domínios e se o Anônimo está ativo.`);
           }
         };
 
