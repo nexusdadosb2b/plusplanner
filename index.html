@@ -46,18 +46,15 @@
     import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 
     // === CONFIGURAÇÃO DO SEU FIREBASE ===
-    // COLOQUE SUAS CHAVES AQUI DENTRO DESSAS ASPAS
-    const myCustomFirebaseConfig = null; 
-    /* Exemplo:
+    // Chaves reais do projeto pluss-planner inseridas:
     const myCustomFirebaseConfig = {
-      apiKey: "AIzaSySeuCodigoAqui...",
-      authDomain: "seu-projeto-123.firebaseapp.com",
-      projectId: "seu-projeto-123",
-      storageBucket: "seu-projeto-123.appspot.com",
-      messagingSenderId: "1234567890",
-      appId: "1:1234567890:web:abc123def456"
+      apiKey: "AIzaSyCi6WmRrPBt9_5hRJsegqERHkzytqhM0hI",
+      authDomain: "pluss-planner.firebaseapp.com",
+      projectId: "pluss-planner",
+      storageBucket: "pluss-planner.firebasestorage.app",
+      messagingSenderId: "1017621824035",
+      appId: "1:1017621824035:web:eabb474b2df676cd04a796"
     };
-    */
 
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'agencia-planner-app';
     let app, auth, db;
