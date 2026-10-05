@@ -2,6 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
+  <!-- Meta tag essencial para responsividade no celular (Mobile First) -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Agência Planner</title>
 
@@ -9,13 +10,14 @@
   <script src="https://cdn.tailwindcss.com"></script>
 
   <style>
+    /* Ocultar barra de rolagem mas manter funcionalidade */
     .hide-scrollbar::-webkit-scrollbar { display: none; }
     .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    /* Previne o zoom no input em iPhones (iOS) */
+    /* Previne o zoom forçado no input em iPhones (iOS) ao digitar */
     input, textarea, select { font-size: 16px !important; }
   </style>
 
-  <!-- Import Maps para carregar React e Firebase direto no navegador -->
+  <!-- Import Maps para carregar React e Firebase direto no navegador sem NPM -->
   <script type="importmap">
     {
       "imports": {
@@ -29,7 +31,7 @@
     }
   </script>
 
-  <!-- Babel: Compila o JSX -->
+  <!-- Babel: Compila o código React (JSX) para Javascript padrão no navegador -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body class="bg-slate-50 text-slate-800">
@@ -39,7 +41,12 @@
   <script type="text/babel" data-type="module">
     import React, { useState, useEffect } from 'react';
     import { createRoot } from 'react-dom/client';
-    import { ChevronLeft, ChevronRight, Plus, Trash2, Calendar as CalendarIcon, Clock, Repeat, AlertCircle, X, Users, Briefcase, MapPin, DollarSign, Plane, User, Phone, Edit2, LayoutDashboard, TrendingUp, CreditCard, CalendarDays, CheckCircle2, Menu } from 'lucide-react';
+    import { 
+      ChevronLeft, ChevronRight, Plus, Trash2, Calendar as CalendarIcon, 
+      Clock, Repeat, AlertCircle, X, Users, Briefcase, MapPin, DollarSign, 
+      Plane, User, Phone, Edit2, LayoutDashboard, TrendingUp, CreditCard, 
+      CalendarDays, CheckCircle2, Menu, ArrowUpCircle, ArrowDownCircle, PlusCircle
+    } from 'lucide-react';
     import { initializeApp } from 'firebase/app';
     import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
     import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
@@ -54,8 +61,8 @@
       appId: "1:1017621824035:web:eabb474b2df676cd04a796"
     };
 
+    // Inicialização segura do Firebase
     let app, auth, db;
-
     try {
       app = initializeApp(myCustomFirebaseConfig);
       auth = getAuth(app);
@@ -65,112 +72,111 @@
     }
 
     function PlannerApp() {
+      // ESTADOS DO APLICATIVO
       const [currentDate, setCurrentDate] = useState(new Date());
       const [financeDate, setFinanceDate] = useState(new Date()); 
       const [selectedDay, setSelectedDay] = useState(null);
       const [activeTab, setActiveTab] = useState('calendar'); 
+      const [errorMsg, setErrorMsg] = useState("");
+      const [user, setUser] = useState(null);
+      const [loading, setLoading] = useState(true);
 
+      // ESTADOS DO MENU RESPONSIVO
+      const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
+
+      // ESTADOS DOS DADOS
+      const [permanentActivities, setPermanentActivities] = useState([]);
+      const [variableTasks, setVariableTasks] = useState([]);
       const [clients, setClients] = useState([]);
+      const [transactions, setTransactions] = useState([]); // <-- NOVO: Lançamentos Extras/Descontos
+
+      // ESTADOS DOS FORMULÁRIOS
+      const [newPermTitle, setNewPermTitle] = useState("");
+      const [newPermDay, setNewPermDay] = useState("1");
+      const [newPermTime, setNewPermTime] = useState("");
+      
+      const [newVarTitle, setNewVarTitle] = useState("");
+      const [newVarTime, setNewVarTime] = useState("");
+      const [newVarDuration, setNewVarDuration] = useState("1");
+      const [modalTab, setModalTab] = useState('view');
+
+      // ESTADO DO MODAL DE CLIENTES
       const [isClientModalOpen, setIsClientModalOpen] = useState(false);
       const [editingClient, setEditingClient] = useState(null);
-      
       const initialClientState = {
         name: '', type: 'EM PROSPECÇÃO', service: '', value: '', deadline: '',
         location: '', requiresTravel: false, responsible: '', status: 'Ativo',
         contact: '', notes: '', dueDate: '', 
         hasCommission: false, commissionTo: '', commissionPix: '', 
         isInstallment: false, 
-        isPaid: false, // Para pagamentos únicos
-        paidMonths: {}, // Para pagamentos recorrentes { '2026-10': true }
+        isPaid: false, 
+        paidMonths: {}, 
         installments: [{ id: Date.now(), date: '', value: '', isPaid: false }]
       };
       const [clientForm, setClientForm] = useState(initialClientState);
 
-      const [user, setUser] = useState(null);
-      const [permanentActivities, setPermanentActivities] = useState([]);
-      const [variableTasks, setVariableTasks] = useState([]);
-      const [loading, setLoading] = useState(true);
-      
-      const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
-      const [errorMsg, setErrorMsg] = useState("");
-      
-      const [newPermTitle, setNewPermTitle] = useState("");
-      const [newPermDay, setNewPermDay] = useState("1");
-      const [newPermTime, setNewPermTime] = useState("");
-      const [newVarTitle, setNewVarTitle] = useState("");
-      const [newVarTime, setNewVarTime] = useState("");
-      const [newVarDuration, setNewVarDuration] = useState("1");
-      const [modalTab, setModalTab] = useState('view');
+      // ESTADO DO MODAL DE TRANSAÇÕES EXTRAS
+      const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
+      const initialTransactionState = { type: 'income', description: '', value: '', date: '', isPaid: false, clientId: '' };
+      const [transactionForm, setTransactionForm] = useState(initialTransactionState);
 
       const daysOfWeek = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
       const daysOfWeekShort = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+      const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
+      // EFEITOS INICIAIS (Firebase Auth e Banco de Dados)
       useEffect(() => {
         if (!auth) return;
         const authenticate = async () => {
-          try {
-            await signInAnonymously(auth);
-          } catch (err) {
-            setErrorMsg(`Erro de Autenticação (${err.code}). Verifique se seu domínio Vercel está autorizado no Firebase Authentication.`);
-          }
+          try { await signInAnonymously(auth); } 
+          catch (err) { setErrorMsg(`Erro Auth (${err.code}): Configure o Domínio na Vercel e o Login Anônimo.`); }
         };
-
         authenticate();
         const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
           setUser(currentUser);
           if (!currentUser) setLoading(false);
         });
 
-        const handleResize = () => {
-          if (window.innerWidth > 768) setIsSidebarOpen(true);
-          else setIsSidebarOpen(false);
-        };
+        const handleResize = () => setIsSidebarOpen(window.innerWidth > 768);
         window.addEventListener('resize', handleResize);
-
-        return () => {
-          unsubscribeAuth();
-          window.removeEventListener('resize', handleResize);
-        }
+        return () => { unsubscribeAuth(); window.removeEventListener('resize', handleResize); }
       }, []);
 
       useEffect(() => {
         if (!user || !db) return;
         setLoading(true);
 
+        // Caminhos globais fixos para agência
         const permRef = collection(db, 'agencia_workspace', 'main', 'permanent_activities');
         const varRef = collection(db, 'agencia_workspace', 'main', 'variable_tasks');
         const clientRef = collection(db, 'agencia_workspace', 'main', 'clients');
+        const transRef = collection(db, 'agencia_workspace', 'main', 'transactions'); // Nova coleção
 
         const unsubPerm = onSnapshot(permRef, (snapshot) => {
-          const perms = [];
-          snapshot.forEach(doc => perms.push({ id: doc.id, ...doc.data() }));
-          setPermanentActivities(perms);
-        }, (err) => setErrorMsg("Erro leitura permanentes: " + err.message));
-
+          const perms = []; snapshot.forEach(doc => perms.push({ id: doc.id, ...doc.data() })); setPermanentActivities(perms);
+        });
         const unsubVar = onSnapshot(varRef, (snapshot) => {
-          const vars = [];
-          snapshot.forEach(doc => vars.push({ id: doc.id, ...doc.data() }));
-          setVariableTasks(vars);
-          setLoading(false);
-        }, (err) => setErrorMsg("Erro leitura variáveis: " + err.message));
-
+          const vars = []; snapshot.forEach(doc => vars.push({ id: doc.id, ...doc.data() })); setVariableTasks(vars); setLoading(false);
+        });
         const unsubClients = onSnapshot(clientRef, (snapshot) => {
-          const cls = [];
-          snapshot.forEach(doc => cls.push({ id: doc.id, ...doc.data() }));
-          setClients(cls);
-        }, (err) => setErrorMsg("Erro leitura clientes: " + err.message));
+          const cls = []; snapshot.forEach(doc => cls.push({ id: doc.id, ...doc.data() })); setClients(cls);
+        });
+        const unsubTrans = onSnapshot(transRef, (snapshot) => {
+          const trs = []; snapshot.forEach(doc => trs.push({ id: doc.id, ...doc.data() })); setTransactions(trs);
+        });
 
-        return () => { unsubPerm(); unsubVar(); unsubClients(); };
+        return () => { unsubPerm(); unsubVar(); unsubClients(); unsubTrans(); };
       }, [user]);
 
       const handleAddPermanent = async (e) => {
         e.preventDefault();
         if (!newPermTitle || !newPermTime || !user) return;
         try {
-          const permRef = collection(db, 'agencia_workspace', 'main', 'permanent_activities');
-          await addDoc(permRef, { title: newPermTitle, dayOfWeek: parseInt(newPermDay), time: newPermTime, createdAt: new Date().toISOString() });
+          await addDoc(collection(db, 'agencia_workspace', 'main', 'permanent_activities'), { 
+            title: newPermTitle, dayOfWeek: parseInt(newPermDay), time: newPermTime, createdAt: new Date().toISOString() 
+          });
           setNewPermTitle(""); setNewPermTime("");
-        } catch (err) { setErrorMsg("Erro ao salvar atividade permanente."); }
+        } catch (err) { setErrorMsg("Erro ao salvar fixo."); }
       };
 
       const handleAddVariable = async (e, dateString) => {
@@ -182,23 +188,19 @@
           end.setDate(end.getDate() + parseInt(newVarDuration || 1) - 1);
           const endDateString = formatDateString(end.getFullYear(), end.getMonth(), end.getDate());
 
-          const varRef = collection(db, 'agencia_workspace', 'main', 'variable_tasks');
-          await addDoc(varRef, { 
+          await addDoc(collection(db, 'agencia_workspace', 'main', 'variable_tasks'), { 
             title: newVarTitle, date: dateString, endDate: endDateString,
-            duration: parseInt(newVarDuration || 1), time: newVarTime || null, 
-            createdAt: new Date().toISOString() 
+            duration: parseInt(newVarDuration || 1), time: newVarTime || null, createdAt: new Date().toISOString() 
           });
-          
           setNewVarTitle(""); setNewVarTime(""); setNewVarDuration("1"); setModalTab('view'); 
         } catch (err) { setErrorMsg("Erro ao salvar tarefa."); }
       };
 
       const handleDelete = async (id, type) => {
         if (!user) return;
-        try {
-          const collectionName = type === 'permanent' ? 'permanent_activities' : 'variable_tasks';
-          await deleteDoc(doc(db, 'agencia_workspace', 'main', collectionName, id));
-        } catch (err) { setErrorMsg("Erro ao excluir."); }
+        const col = type === 'permanent' ? 'permanent_activities' : (type === 'transaction' ? 'transactions' : 'variable_tasks');
+        try { await deleteDoc(doc(db, 'agencia_workspace', 'main', col, id)); } 
+        catch (err) { setErrorMsg("Erro ao excluir."); }
       };
 
       const handleSaveClient = async (e) => {
@@ -215,81 +217,73 @@
             await addDoc(collection(db, 'agencia_workspace', 'main', 'clients'), { ...dataToSave, createdAt: new Date().toISOString() });
           }
           setIsClientModalOpen(false); setEditingClient(null); setClientForm(initialClientState);
-        } catch (err) { setErrorMsg("Erro ao salvar cliente: " + err.message); }
+        } catch (err) { setErrorMsg("Erro ao salvar cliente."); }
       };
 
       const openEditClient = (client) => { 
         const formattedClient = { ...client };
-        if (!formattedClient.installments || formattedClient.installments.length === 0) {
+        if (!formattedClient.installments) formattedClient.installments = [];
+        if (formattedClient.isInstallment && formattedClient.installments.length === 0) {
            formattedClient.installments = [{ id: Date.now(), date: '', value: '', isPaid: false }];
         }
-        setEditingClient(formattedClient); 
-        setClientForm(formattedClient); 
-        setIsClientModalOpen(true); 
+        setEditingClient(formattedClient); setClientForm(formattedClient); setIsClientModalOpen(true); 
       };
 
-      const handleDeleteClient = async (id) => { if (user) await deleteDoc(doc(db, 'agencia_workspace', 'main', 'clients', id)); };
+      const addInstallment = () => setClientForm({ ...clientForm, installments: [...clientForm.installments, { id: Date.now(), date: '', value: '', isPaid: false }] });
+      const updateInstallment = (id, field, val) => setClientForm({ ...clientForm, installments: clientForm.installments.map(i => i.id === id ? { ...i, [field]: val } : i) });
+      const removeInstallment = (id) => setClientForm({ ...clientForm, installments: clientForm.installments.filter(i => i.id !== id) });
 
-      const addInstallment = () => {
-         setClientForm({ ...clientForm, installments: [...clientForm.installments, { id: Date.now(), date: '', value: '', isPaid: false }] });
+      const handleSaveTransaction = async (e) => {
+        e.preventDefault();
+        if (!user) return;
+        try {
+          if (!transactionForm.date || !transactionForm.value) { setErrorMsg("Data e valor são obrigatórios."); return; }
+          await addDoc(collection(db, 'agencia_workspace', 'main', 'transactions'), { 
+            ...transactionForm, createdAt: new Date().toISOString() 
+          });
+          setIsTransactionModalOpen(false); setTransactionForm(initialTransactionState);
+        } catch (err) { setErrorMsg("Erro ao salvar lançamento avulso."); }
       };
 
-      const updateInstallment = (id, field, val) => {
-         const newInst = clientForm.installments.map(i => i.id === id ? { ...i, [field]: val } : i);
-         setClientForm({ ...clientForm, installments: newInst });
-      };
-
-      const removeInstallment = (id) => {
-         setClientForm({ ...clientForm, installments: clientForm.installments.filter(i => i.id !== id) });
-      };
-
-      // 🔴 NOVA FUNÇÃO PARA O FINANCEIRO: Alterna o status de "Pago" diretamente da aba
       const togglePaymentStatus = async (item, financeYear, financeMonth) => {
         if (!user) return;
-        const clientRef = doc(db, 'agencia_workspace', 'main', 'clients', item.id);
-        const client = clients.find(c => c.id === item.id);
-        if (!client) return;
-
         try {
+          // Se for Lançamento Extra/Desconto
+          if (item.isTransaction) {
+            await updateDoc(doc(db, 'agencia_workspace', 'main', 'transactions', item.id), { isPaid: !item.isPaid });
+            return;
+          }
+
+          // Se for Mensalidade de Cliente (Recorrente/Parcelado)
+          const clientRef = doc(db, 'agencia_workspace', 'main', 'clients', item.id);
+          const client = clients.find(c => c.id === item.id);
+          if (!client) return;
+
           if (item.tag.includes('Parcela')) {
-            // É um parcelamento: atualiza a parcela específica
-            const newInstallments = client.installments.map(inst =>
-              inst.id === item.instId ? { ...inst, isPaid: !inst.isPaid } : inst
-            );
+            const newInstallments = client.installments.map(inst => inst.id === item.instId ? { ...inst, isPaid: !inst.isPaid } : inst);
             await updateDoc(clientRef, { installments: newInstallments });
           } else if (item.tag === 'Recorrente') {
-            // É recorrente: salva apenas para este mês específico
             const monthKey = `${financeYear}-${String(financeMonth + 1).padStart(2, '0')}`;
             const currentPaidMonths = client.paidMonths || {};
-            const isCurrentlyPaid = !!currentPaidMonths[monthKey];
-            await updateDoc(clientRef, {
-              [`paidMonths.${monthKey}`]: !isCurrentlyPaid
-            });
+            await updateDoc(clientRef, { [`paidMonths.${monthKey}`]: !currentPaidMonths[monthKey] });
           } else {
-            // Pagamento pontual de vez única
             await updateDoc(clientRef, { isPaid: !client.isPaid });
           }
-        } catch (err) {
-           setErrorMsg("Erro ao atualizar status de pagamento.");
-        }
+        } catch (err) { setErrorMsg("Erro ao atualizar pagamento."); }
       };
 
+      // UTILITÁRIOS DE CALENDÁRIO
       const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
       const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
       const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
       const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
-
       const prevFinanceMonth = () => setFinanceDate(new Date(financeDate.getFullYear(), financeDate.getMonth() - 1, 1));
       const nextFinanceMonth = () => setFinanceDate(new Date(financeDate.getFullYear(), financeDate.getMonth() + 1, 1));
-
-      const year = currentDate.getFullYear(); const month = currentDate.getMonth();
-      const daysCount = getDaysInMonth(year, month); const firstDay = getFirstDayOfMonth(year, month);
-      const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
       const formatDateString = (y, m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-
+      
       const parseCurrency = (valStr) => {
         if (!valStr) return 0;
-        const cleanStr = valStr.toString().replace(/[^\d.,]/g, '');
+        const cleanStr = valStr.toString().replace(/[^\d.,-]/g, ''); // Permite sinal negativo
         if (cleanStr.includes(',') && cleanStr.includes('.')) return parseFloat(cleanStr.replace(/\./g, '').replace(',', '.'));
         if (cleanStr.includes(',')) return parseFloat(cleanStr.replace(',', '.'));
         return parseFloat(cleanStr) || 0;
@@ -301,38 +295,32 @@
         const today = new Date();
         const monthKey = `${tYear}-${String(tMonth + 1).padStart(2, '0')}`;
 
-        let monthTotal = 0; 
-        let totalPago = 0; 
+        let totalBase = 0; 
+        let totalBasePago = 0; 
+        let totalExtras = 0;
+        let totalExtrasPago = 0;
+        let totalDescontos = 0;
+        let totalDescontosAplicados = 0;
+
         const monthItems = [];
 
+        // 1. Processar Clientes Base (Mensalidades, Recorrências, Parcelas)
         clients.forEach(client => {
           if (client.type === 'EM PROSPECÇÃO') return; 
 
           if (client.type === 'PERIÓDICO' && client.value && client.dueDate) {
             const numValue = parseCurrency(client.value);
             if (numValue === 0) return;
-            
             const clientDate = new Date(client.dueDate + 'T12:00:00');
             const diffMonths = (tYear - clientDate.getFullYear()) * 12 + (tMonth - clientDate.getMonth());
             
-            // Só exibe se já chegou ou passou do mês de início do contrato
             if (diffMonths >= 0) {
               const isPaid = client.paidMonths && client.paidMonths[monthKey] === true;
               const isLate = !isPaid && today.getFullYear() === tYear && today.getMonth() === tMonth && today.getDate() > clientDate.getDate();
               const isToday = today.getFullYear() === tYear && today.getMonth() === tMonth && today.getDate() === clientDate.getDate();
               
-              monthTotal += numValue;
-              if (isPaid) totalPago += numValue;
-
-              monthItems.push({ 
-                ...client, 
-                tag: 'Recorrente', 
-                expectedDay: clientDate.getDate(), 
-                parsedValue: numValue, 
-                isLate, 
-                isToday, 
-                isPaid 
-              });
+              totalBase += numValue; if (isPaid) totalBasePago += numValue;
+              monthItems.push({ ...client, isTransaction: false, tag: 'Recorrente', expectedDay: clientDate.getDate(), parsedValue: numValue, isLate, isToday, isPaid });
             }
           }
 
@@ -341,25 +329,13 @@
                client.installments.forEach((inst, index) => {
                   if (!inst.date || !inst.value) return;
                   const instDate = new Date(inst.date + 'T12:00:00');
-                  
                   if (instDate.getFullYear() === tYear && instDate.getMonth() === tMonth) {
                      const numValue = parseCurrency(inst.value);
                      const isLate = !inst.isPaid && today.getFullYear() === tYear && today.getMonth() === tMonth && today.getDate() > instDate.getDate();
                      const isToday = today.getFullYear() === tYear && today.getMonth() === tMonth && today.getDate() === instDate.getDate();
                      
-                     monthTotal += numValue;
-                     if (inst.isPaid) totalPago += numValue;
-
-                     monthItems.push({ 
-                        ...client, 
-                        tag: `Parcela ${index + 1}/${client.installments.length}`, 
-                        expectedDay: instDate.getDate(), 
-                        parsedValue: numValue, 
-                        isLate, 
-                        isToday,
-                        isPaid: inst.isPaid,
-                        instId: inst.id
-                     });
+                     totalBase += numValue; if (inst.isPaid) totalBasePago += numValue;
+                     monthItems.push({ ...client, isTransaction: false, tag: `Parcela ${index + 1}/${client.installments.length}`, expectedDay: instDate.getDate(), parsedValue: numValue, isLate, isToday, isPaid: inst.isPaid, instId: inst.id });
                   }
                });
             } else if (!client.isInstallment && client.value && client.dueDate) {
@@ -370,36 +346,74 @@
                   const isLate = !isPaid && today.getFullYear() === tYear && today.getMonth() === tMonth && today.getDate() > clientDate.getDate();
                   const isToday = today.getFullYear() === tYear && today.getMonth() === tMonth && today.getDate() === clientDate.getDate();
                   
-                  monthTotal += numValue;
-                  if (isPaid) totalPago += numValue;
-
-                  monthItems.push({ 
-                    ...client, 
-                    tag: 'Pagamento Único', 
-                    expectedDay: clientDate.getDate(), 
-                    parsedValue: numValue, 
-                    isLate, 
-                    isToday, 
-                    isPaid 
-                  });
+                  totalBase += numValue; if (isPaid) totalBasePago += numValue;
+                  monthItems.push({ ...client, isTransaction: false, tag: 'Pagamento Único', expectedDay: clientDate.getDate(), parsedValue: numValue, isLate, isToday, isPaid });
                }
             }
           }
         });
 
+        // 2. Processar Lançamentos Avulsos (Extras e Descontos) do Mês
+        const monthTransactions = transactions.filter(t => t.date && t.date.startsWith(monthKey));
+        monthTransactions.forEach(t => {
+            const numVal = parseCurrency(t.value);
+            const tDate = new Date(t.date + 'T12:00:00');
+            const isToday = today.getFullYear() === tYear && today.getMonth() === tMonth && today.getDate() === tDate.getDate();
+            const isLate = !t.isPaid && today > tDate; // Extra ou desconto pendente
+            const clientName = t.clientId ? (clients.find(c => c.id === t.clientId)?.name || '') : '';
+
+            if (t.type === 'income') {
+                totalExtras += numVal;
+                if (t.isPaid) totalExtrasPago += numVal;
+            } else {
+                totalDescontos += numVal;
+                if (t.isPaid) totalDescontosAplicados += numVal;
+            }
+
+            monthItems.push({
+                isTransaction: true,
+                id: t.id,
+                name: t.description,
+                clientName: clientName, // Para exibição
+                tag: t.type === 'income' ? 'Receita Extra' : 'Desconto / Saída',
+                type: t.type, // 'income' ou 'expense'
+                expectedDay: tDate.getDate(),
+                parsedValue: numVal,
+                isLate,
+                isToday,
+                isPaid: t.isPaid,
+                hasCommission: false // Transações não têm a tag amarela visual
+            });
+        });
+
+        // Ordenação global por dia
         monthItems.sort((a, b) => a.expectedDay - b.expectedDay);
-        const isRealCurrentMonth = today.getFullYear() === tYear && today.getMonth() === tMonth;
+        
+        // Matemáticas do Dashboard
+        const totalEntradasPrevistas = totalBase + totalExtras;
+        const totalRecebidoLivre = totalBasePago + totalExtrasPago;
+        const pendenteAReceber = totalEntradasPrevistas - totalRecebidoLivre;
+        const saldoLiquidoAtual = totalRecebidoLivre - totalDescontosAplicados; // Só desconta do saldo se o desconto/despesa já foi "pago/realizado"
 
         return { 
            name: `${monthNames[tMonth]} ${tYear}`, 
            items: monthItems, 
-           total: monthTotal, 
-           totalPago: totalPago,
-           isCurrentMonth: isRealCurrentMonth 
+           isCurrentMonth: today.getFullYear() === tYear && today.getMonth() === tMonth,
+           dashboard: {
+             entradas: totalEntradasPrevistas,
+             descontos: totalDescontos,
+             pendente: pendenteAReceber,
+             recebidoBruto: totalRecebidoLivre,
+             liquidoAtual: saldoLiquidoAtual
+           }
         };
       };
 
       const financeData = generateFinanceForMonth(financeDate);
+
+      // VARIÁVEIS DE CALENDÁRIO HTML
+      const year = currentDate.getFullYear(); const month = currentDate.getMonth();
+      const daysCount = getDaysInMonth(year, month); const firstDay = getFirstDayOfMonth(year, month);
 
       return (
         <div className="flex flex-col h-screen overflow-hidden bg-slate-50">
@@ -411,6 +425,7 @@
             </div>
           )}
 
+          {}
           <header className="bg-slate-900 text-white flex flex-col sm:flex-row items-center justify-between px-3 sm:px-4 py-2 sm:py-3 shrink-0 z-40 shadow-md gap-2 sm:gap-0">
             <div className="flex items-center justify-between w-full sm:w-auto">
               <h1 className="font-bold text-lg sm:text-xl tracking-tight flex items-center">
@@ -418,27 +433,18 @@
               </h1>
             </div>
             <nav className="flex space-x-1 sm:space-x-2 bg-slate-800/50 p-1 rounded-lg w-full sm:w-auto overflow-x-auto hide-scrollbar">
-              <button onClick={() => setActiveTab('calendar')} className={`flex-1 sm:flex-none flex items-center justify-center px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'calendar' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}>
-                <CalendarIcon className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> Calendário
-              </button>
-              <button onClick={() => setActiveTab('clients')} className={`flex-1 sm:flex-none flex items-center justify-center px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'clients' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}>
-                <Users className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> Clientes
-              </button>
-              <button onClick={() => setActiveTab('finance')} className={`flex-1 sm:flex-none flex items-center justify-center px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'finance' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}>
-                <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> Financeiro
-              </button>
+              <button onClick={() => setActiveTab('calendar')} className={`flex-1 sm:flex-none flex items-center justify-center px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'calendar' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}><CalendarIcon className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> Calendário</button>
+              <button onClick={() => setActiveTab('clients')} className={`flex-1 sm:flex-none flex items-center justify-center px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'clients' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}><Users className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> Clientes</button>
+              <button onClick={() => setActiveTab('finance')} className={`flex-1 sm:flex-none flex items-center justify-center px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'finance' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}><TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> Financeiro</button>
             </nav>
           </header>
 
           <div className="flex-1 flex overflow-hidden relative">
             
-            {/* --- ABA CALENDÁRIO --- */}
+            {}
             {activeTab === 'calendar' && (
               <>
-                {isSidebarOpen && (
-                  <div className="md:hidden absolute inset-0 bg-slate-900/60 z-20 backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)} />
-                )}
-
+                {isSidebarOpen && (<div className="md:hidden absolute inset-0 bg-slate-900/60 z-20 backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)} />)}
                 <div className={`${isSidebarOpen ? 'w-[85%] max-w-[320px] translate-x-0' : 'w-0 -translate-x-full md:translate-x-0'} absolute md:relative z-30 h-full transition-all duration-300 bg-white border-r border-slate-200 overflow-hidden flex flex-col shadow-2xl md:shadow-sm`}>
                   <div className="p-3 sm:p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
                     <h2 className="font-bold text-slate-800 flex items-center text-sm sm:text-base"><Repeat className="w-4 h-4 mr-2 text-indigo-500" /> Atividades Fixas</h2>
@@ -454,9 +460,7 @@
                         </select>
                         <input type="time" className="w-24 p-2 text-xs sm:text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500" value={newPermTime} onChange={e => setNewPermTime(e.target.value)} required />
                       </div>
-                      <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded text-xs sm:text-sm font-medium transition-colors flex justify-center items-center">
-                        <Plus className="w-4 h-4 mr-1" /> Adicionar
-                      </button>
+                      <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded text-xs sm:text-sm font-medium transition-colors flex justify-center items-center"><Plus className="w-4 h-4 mr-1" /> Adicionar</button>
                     </form>
                     
                     <div className="space-y-4">
@@ -509,11 +513,7 @@
                         const dayOfWeek = new Date(year, month, dayNum).getDay();
                         const isToday = formatDateString(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()) === dateString;
                         const dayPerms = permanentActivities.filter(a => a.dayOfWeek === dayOfWeek).sort((a, b) => a.time.localeCompare(b.time));
-                        
-                        const dayVars = variableTasks.filter(t => {
-                          const endD = t.endDate || t.date;
-                          return dateString >= t.date && dateString <= endD;
-                        }).sort((a, b) => (a.time || "24:00").localeCompare(b.time || "24:00"));
+                        const dayVars = variableTasks.filter(t => dateString >= t.date && dateString <= (t.endDate || t.date)).sort((a, b) => (a.time || "24:00").localeCompare(b.time || "24:00"));
 
                         return (
                           <div key={dayNum} onClick={() => { setSelectedDay({ dayNum, dateString, dayOfWeek, dayPerms, dayVars }); setModalTab('view'); }} className={`bg-white min-h-[80px] sm:min-h-[120px] p-1 sm:p-2 hover:bg-indigo-50/30 cursor-pointer transition-colors relative group ${isToday ? 'ring-2 ring-indigo-500 ring-inset z-10' : ''}`}>
@@ -552,16 +552,9 @@
                           {modalTab === 'add' ? (
                             <form onSubmit={(e) => { handleAddVariable(e, selectedDay.dateString); }} className="bg-amber-50/50 p-3 sm:p-4 rounded-lg border border-amber-100">
                               <input type="text" placeholder="Ex: Viagem de Negócios, Reunião..." className="w-full p-2.5 mb-3 text-xs sm:text-sm border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white shadow-sm" value={newVarTitle} onChange={e => setNewVarTitle(e.target.value)} required />
-                              
                               <div className="grid grid-cols-2 gap-3 mb-4">
-                                <div>
-                                  <label className="block text-[10px] sm:text-xs font-semibold text-amber-700 mb-1">Horário (Opcional)</label>
-                                  <input type="time" className="w-full p-2 text-xs sm:text-sm border border-amber-200 rounded-lg bg-white shadow-sm" value={newVarTime} onChange={e => setNewVarTime(e.target.value)} />
-                                </div>
-                                <div>
-                                  <label className="block text-[10px] sm:text-xs font-semibold text-amber-700 mb-1">Duração (Dias)</label>
-                                  <input type="number" min="1" className="w-full p-2 text-xs sm:text-sm border border-amber-200 rounded-lg bg-white shadow-sm" value={newVarDuration} onChange={e => setNewVarDuration(e.target.value)} required />
-                                </div>
+                                <div><label className="block text-[10px] sm:text-xs font-semibold text-amber-700 mb-1">Horário (Opcional)</label><input type="time" className="w-full p-2 text-xs sm:text-sm border border-amber-200 rounded-lg bg-white shadow-sm" value={newVarTime} onChange={e => setNewVarTime(e.target.value)} /></div>
+                                <div><label className="block text-[10px] sm:text-xs font-semibold text-amber-700 mb-1">Duração (Dias)</label><input type="number" min="1" className="w-full p-2 text-xs sm:text-sm border border-amber-200 rounded-lg bg-white shadow-sm" value={newVarDuration} onChange={e => setNewVarDuration(e.target.value)} required /></div>
                               </div>
                               <button type="submit" className="w-full bg-amber-500 hover:bg-amber-600 text-white p-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors flex justify-center items-center shadow-sm"><Plus className="w-4 h-4 mr-2" /> Salvar Tarefa</button>
                             </form>
@@ -596,10 +589,7 @@
                                 </div>
                               )}
                               {selectedDay.dayPerms.length === 0 && variableTasks.filter(t => selectedDay.dateString >= t.date && selectedDay.dateString <= (t.endDate || t.date)).length === 0 && (
-                                <div className="text-center py-6 sm:py-8">
-                                  <p className="text-xs sm:text-sm text-slate-400 font-medium">Nenhuma tarefa para este dia.</p>
-                                  <button onClick={() => setModalTab('add')} className="text-indigo-600 text-[10px] sm:text-xs font-semibold mt-2 hover:underline">Adicionar a primeira tarefa</button>
-                                </div>
+                                <div className="text-center py-6 sm:py-8"><p className="text-xs sm:text-sm text-slate-400 font-medium">Nenhuma tarefa para este dia.</p><button onClick={() => setModalTab('add')} className="text-indigo-600 text-[10px] sm:text-xs font-semibold mt-2 hover:underline">Adicionar a primeira tarefa</button></div>
                               )}
                             </div>
                           )}
@@ -611,7 +601,7 @@
               </>
             )}
 
-            {/* --- ABA CLIENTES --- */}
+            {}
             {activeTab === 'clients' && (
               <div className="flex-1 flex flex-col relative bg-slate-50 overflow-hidden w-full">
                 <header className="bg-white border-b border-slate-200 p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shrink-0">
@@ -647,14 +637,10 @@
                                 <div className="text-[10px] sm:text-xs text-slate-500 mb-2 sm:mb-3 space-y-1 sm:space-y-1.5 mt-1 sm:mt-2">
                                   <div className="flex items-start"><Briefcase className="w-3.5 h-3.5 mr-1.5 mt-0.5 shrink-0 text-slate-400" /> <span className="line-clamp-2">{client.service || 'Serviço não detalhado'}</span></div>
                                   {client.responsible && <div className="flex items-center"><User className="w-3.5 h-3.5 mr-1.5 shrink-0 text-slate-400" /> {client.responsible}</div>}
-                                  {client.location && <div className="flex items-center"><MapPin className="w-3.5 h-3.5 mr-1.5 shrink-0 text-slate-400" /> {client.location}</div>}
-                                  {client.contact && <div className="flex items-center"><Phone className="w-3.5 h-3.5 mr-1.5 shrink-0 text-slate-400" /> {client.contact}</div>}
                                 </div>
                                 <div className="flex flex-wrap gap-1.5 mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-slate-50">
                                   {client.value && <span className="inline-flex items-center text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700"><DollarSign className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-0.5"/> {client.value}</span>}
-                                  {client.dueDate && <span className="inline-flex items-center text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700" title="Vencimento Base"><CalendarDays className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-0.5"/> Dia {client.dueDate.split('-')[2] || '--'}</span>}
-                                  {client.requiresTravel && <span className="inline-flex items-center text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded bg-purple-100 text-purple-700"><Plane className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-0.5"/> Viagem</span>}
-                                  {client.hasCommission && <span className="inline-flex items-center text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-800 shadow-sm border border-yellow-200">💰 Com</span>}
+                                  {client.hasCommission && <span className="inline-flex items-center text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-800 border border-yellow-200">💰 Comissionado</span>}
                                   {client.isInstallment && client.installments && client.installments.length > 0 && <span className="inline-flex items-center text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200"><CreditCard className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-0.5" /> {client.installments.length} Parc.</span>}
                                 </div>
                               </div>
@@ -669,95 +655,111 @@
               </div>
             )}
 
-            {/* --- ABA FINANCEIRO --- */}
+            {}
             {activeTab === 'finance' && (
               <div className="flex-1 flex flex-col relative bg-slate-50 overflow-hidden w-full">
-                <header className="bg-white border-b border-slate-200 p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between shrink-0 gap-3 sm:gap-0">
-                  <div>
-                     <h2 className="text-base sm:text-xl font-bold text-slate-800 flex items-center">Projeção Financeira</h2>
-                     <p className="text-[10px] sm:text-sm text-slate-500">Fluxo de Caixa Mensal</p>
+                <header className="bg-white border-b border-slate-200 p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between shrink-0 gap-3 sm:gap-0 z-10">
+                  <div className="w-full sm:w-auto flex justify-between items-center">
+                     <div>
+                       <h2 className="text-base sm:text-xl font-bold text-slate-800 flex items-center">Gestão Financeira</h2>
+                       <p className="text-[10px] sm:text-sm text-slate-500">Fluxo de Caixa e Lançamentos</p>
+                     </div>
                   </div>
                   
-                  <div className="flex items-center bg-slate-100 p-1 rounded-lg w-full sm:w-auto justify-between shadow-sm">
-                     <button onClick={prevFinanceMonth} className="p-1.5 sm:p-2 hover:bg-white rounded-md transition-colors"><ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600" /></button>
+                  <div className="flex items-center bg-slate-100 p-1 rounded-lg w-full sm:w-auto justify-between shadow-sm border border-slate-200">
+                     <button onClick={prevFinanceMonth} className="p-1.5 sm:p-2 hover:bg-white rounded-md transition-colors shadow-sm"><ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600" /></button>
                      <div className="flex items-center px-2 sm:px-4">
-                        <span className="font-bold text-sm sm:text-base text-slate-700 min-w-[120px] text-center">{monthNames[financeDate.getMonth()]} {financeDate.getFullYear()}</span>
+                        <span className="font-black text-sm sm:text-base text-slate-700 min-w-[130px] text-center">{monthNames[financeDate.getMonth()]} {financeDate.getFullYear()}</span>
                      </div>
-                     <button onClick={nextFinanceMonth} className="p-1.5 sm:p-2 hover:bg-white rounded-md transition-colors"><ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600" /></button>
-                     <button onClick={() => setFinanceDate(new Date())} className="ml-1 sm:ml-2 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium bg-indigo-100 text-indigo-700 hover:bg-indigo-200 rounded-md transition-colors">Hoje</button>
+                     <button onClick={nextFinanceMonth} className="p-1.5 sm:p-2 hover:bg-white rounded-md transition-colors shadow-sm"><ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600" /></button>
+                     <button onClick={() => setFinanceDate(new Date())} className="ml-1 sm:ml-2 px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-bold bg-indigo-100 text-indigo-700 hover:bg-indigo-200 rounded-md transition-colors uppercase tracking-wider">Mês Atual</button>
                   </div>
+
+                  <button onClick={() => setIsTransactionModalOpen(true)} className="w-full sm:w-auto justify-center bg-emerald-600 hover:bg-emerald-700 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-bold transition-colors flex items-center shadow-md">
+                    <PlusCircle className="w-4 h-4 mr-1.5" /> Novo Lançamento Avulso
+                  </button>
                 </header>
 
-                <div className="flex-1 p-3 sm:p-6 overflow-y-auto hide-scrollbar">
-                  <div className="max-w-4xl mx-auto pb-6">
-                     <div className={`bg-white rounded-xl shadow-sm border ${financeData.isCurrentMonth ? 'border-indigo-300 ring-1 ring-indigo-100' : 'border-slate-200'} overflow-hidden`}>
-                        
-                        <div className={`p-4 sm:p-6 border-b flex flex-col sm:flex-row justify-between items-start gap-4 ${financeData.isCurrentMonth ? 'bg-indigo-50/50 border-indigo-100' : 'bg-slate-50 border-slate-100'}`}>
-                           <div>
-                              <h3 className={`font-black text-lg sm:text-2xl flex items-center ${financeData.isCurrentMonth ? 'text-indigo-800' : 'text-slate-800'}`}>
-                                 Receita do Mês
-                                 {financeData.isCurrentMonth && <span className="text-[10px] sm:text-xs ml-2 sm:ml-3 px-2 py-0.5 bg-indigo-600 text-white rounded-full font-bold uppercase tracking-wide shadow-sm">Mês Atual</span>}
-                              </h3>
-                              <p className="text-xs sm:text-sm text-slate-500 mt-1">Total a receber de todas as contas neste mês</p>
-                           </div>
-                           
-                           <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                              <div className="bg-white p-3 rounded-lg border border-slate-200 flex-1 sm:flex-none">
-                                 <span className="text-[10px] font-bold text-slate-400 uppercase">Previsão Total</span>
-                                 <span className={`text-xl font-black block ${financeData.isCurrentMonth ? 'text-indigo-700' : 'text-slate-700'}`}>R$ {financeData.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                              </div>
-                              <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-100 flex-1 sm:flex-none">
-                                 <span className="text-[10px] font-bold text-emerald-600 uppercase">Já Recebido (Pago)</span>
-                                 <span className="text-xl font-black block text-emerald-700">R$ {financeData.totalPago.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                              </div>
-                              <div className="bg-orange-50 p-3 rounded-lg border border-orange-100 flex-1 sm:flex-none">
-                                 <span className="text-[10px] font-bold text-orange-600 uppercase">Pendente</span>
-                                 <span className="text-xl font-black block text-orange-700">R$ {(financeData.total - financeData.totalPago).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                              </div>
-                           </div>
+                <div className="flex-1 p-3 sm:p-6 overflow-y-auto hide-scrollbar bg-slate-100">
+                  <div className="max-w-5xl mx-auto pb-10">
+                     
+                     {/* Dashboard Cards com a Matemática Nova */}
+                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6">
+                       <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm">
+                         <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase">Entradas Previstas</p>
+                         <h3 className="text-lg sm:text-2xl font-black text-slate-700 mt-1">R$ {financeData.dashboard.entradas.toLocaleString('pt-BR', {minimumFractionDigits:2})}</h3>
+                       </div>
+                       <div className="bg-white p-3 sm:p-4 rounded-xl border border-red-200 shadow-sm bg-red-50/30">
+                         <p className="text-[10px] sm:text-xs font-bold text-red-500 uppercase">Descontos / Saídas</p>
+                         <h3 className="text-lg sm:text-2xl font-black text-red-600 mt-1">- R$ {financeData.dashboard.descontos.toLocaleString('pt-BR', {minimumFractionDigits:2})}</h3>
+                       </div>
+                       <div className="bg-white p-3 sm:p-4 rounded-xl border border-orange-200 shadow-sm bg-orange-50/30">
+                         <p className="text-[10px] sm:text-xs font-bold text-orange-500 uppercase">Falta Receber (Pendente)</p>
+                         <h3 className="text-lg sm:text-2xl font-black text-orange-600 mt-1">R$ {financeData.dashboard.pendente.toLocaleString('pt-BR', {minimumFractionDigits:2})}</h3>
+                       </div>
+                       <div className={`p-3 sm:p-4 rounded-xl border shadow-sm ${financeData.dashboard.liquidoAtual > 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
+                         <p className={`text-[10px] sm:text-xs font-bold uppercase ${financeData.dashboard.liquidoAtual > 0 ? 'text-emerald-600' : 'text-slate-500'}`}>Líquido em Caixa (Atual)</p>
+                         <h3 className={`text-lg sm:text-2xl font-black mt-1 ${financeData.dashboard.liquidoAtual > 0 ? 'text-emerald-700' : 'text-slate-700'}`}>R$ {financeData.dashboard.liquidoAtual.toLocaleString('pt-BR', {minimumFractionDigits:2})}</h3>
+                       </div>
+                     </div>
+
+                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                          <h3 className="font-bold text-slate-700">Linha do Tempo de Recebimentos</h3>
                         </div>
 
                         <div className="p-3 sm:p-5 space-y-2 sm:space-y-3">
                            {financeData.items.length === 0 ? (
-                              <div className="text-center py-10">
-                                 <p className="text-sm sm:text-base text-slate-400 italic font-medium">Nenhum recebimento previsto para este mês.</p>
-                              </div>
+                              <div className="text-center py-10"><p className="text-sm sm:text-base text-slate-400 italic font-medium">Nenhuma movimentação neste mês.</p></div>
                            ) : (
                               financeData.items.map((item, i) => (
-                                 <div key={i} className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 bg-white rounded-xl border ${item.isPaid ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-200'} hover:shadow-md transition-all gap-3 sm:gap-0`}>
-                                    <div>
-                                       <div className="flex flex-wrap items-center gap-2 mb-1">
-                                          <span className="font-bold text-sm sm:text-base text-slate-800">{item.name}</span>
-                                          <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-600 rounded-full">{item.tag}</span>
-                                          
-                                          {/* BOTÃO INTERATIVO DE PAGO/ATRASADO */}
-                                          <button 
-                                            onClick={() => togglePaymentStatus(item, financeDate.getFullYear(), financeDate.getMonth())}
-                                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shadow-sm flex items-center transition-colors cursor-pointer ${
-                                              item.isPaid ? 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-200' : 
-                                              item.isLate ? 'bg-red-100 text-red-700 border-red-200 hover:bg-red-200 animate-pulse' : 
-                                              'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
-                                            }`}
-                                            title="Clique para alternar o status de pagamento"
-                                          >
-                                            {item.isPaid ? (
-                                              <><CheckCircle2 className="w-3 h-3 mr-1"/> Pago</>
-                                            ) : item.isLate ? (
-                                              '🔴 Atrasado (Marcar Pago)'
-                                            ) : (
-                                              '⚪ Pendente (Marcar Pago)'
-                                            )}
-                                          </button>
+                                 <div key={i} className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 bg-white rounded-xl border hover:shadow-md transition-all gap-3 sm:gap-0 ${
+                                   item.isPaid ? 'border-emerald-200 bg-emerald-50/20' : 
+                                   (item.type === 'expense' ? 'border-red-100 bg-red-50/10' : 'border-slate-200')
+                                 }`}>
+                                    <div className="flex items-start gap-3">
+                                      {/* Icone lateral para diferenciar Transações Extras de Clientes Base */}
+                                      <div className="mt-1 hidden sm:block">
+                                        {!item.isTransaction && <Briefcase className={`w-5 h-5 ${item.isPaid ? 'text-emerald-400' : 'text-slate-400'}`} />}
+                                        {item.isTransaction && item.type === 'income' && <ArrowUpCircle className={`w-5 h-5 ${item.isPaid ? 'text-emerald-500' : 'text-emerald-400'}`} />}
+                                        {item.isTransaction && item.type === 'expense' && <ArrowDownCircle className={`w-5 h-5 ${item.isPaid ? 'text-red-500' : 'text-red-400'}`} />}
+                                      </div>
+                                      
+                                      <div>
+                                         <div className="flex flex-wrap items-center gap-2 mb-1">
+                                            <span className="font-bold text-sm sm:text-base text-slate-800">
+                                              {item.name} 
+                                              {item.clientName && <span className="font-normal text-slate-500 text-xs ml-2 hidden sm:inline">- {item.clientName}</span>}
+                                            </span>
+                                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${item.type === 'expense' ? 'bg-red-50 border-red-200 text-red-600' : (item.type === 'income' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-slate-100 border-slate-200 text-slate-600')}`}>{item.tag}</span>
+                                            
+                                            {/* BOTÃO INTERATIVO DE PAGO */}
+                                            <button 
+                                              onClick={() => togglePaymentStatus(item, financeDate.getFullYear(), financeDate.getMonth())}
+                                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shadow-sm flex items-center transition-colors cursor-pointer ${
+                                                item.isPaid ? 'bg-emerald-100 text-emerald-700 border-emerald-300 hover:bg-emerald-200' : 
+                                                item.isLate ? 'bg-red-100 text-red-700 border-red-300 hover:bg-red-200 animate-pulse' : 
+                                                'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                                              }`}
+                                            >
+                                              {item.isPaid ? <><CheckCircle2 className="w-3 h-3 mr-1"/> Confirmado</> : item.isLate ? '🔴 Atrasado (Marcar)' : '⚪ Pendente (Marcar)'}
+                                            </button>
 
-                                          {!item.isPaid && item.isToday && <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full border border-blue-200 shadow-sm">Hoje</span>}
-                                          {item.hasCommission && <span className="text-[10px] font-bold px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded-full border border-yellow-200">💰 {item.commissionTo || 'Comissão'}</span>}
-                                       </div>
-                                       <span className="text-[11px] sm:text-xs font-medium text-slate-500 flex items-center">
-                                          <CalendarDays className="w-3.5 h-3.5 mr-1" /> Vencimento dia {String(item.expectedDay).padStart(2, '0')}
-                                       </span>
+                                            {!item.isPaid && item.isToday && <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full border border-blue-200 shadow-sm">Hoje</span>}
+                                            {item.isTransaction && <button onClick={() => handleDelete(item.id, 'transaction')} className="text-slate-300 hover:text-red-500 p-0.5 ml-2"><Trash2 className="w-3.5 h-3.5" /></button>}
+                                         </div>
+                                         <span className="text-[11px] sm:text-xs font-medium text-slate-500 flex items-center mt-1">
+                                            <CalendarDays className="w-3.5 h-3.5 mr-1" /> Previsto para o dia {String(item.expectedDay).padStart(2, '0')}
+                                            {item.clientName && <span className="sm:hidden ml-2 truncate max-w-[120px]">- {item.clientName}</span>}
+                                         </span>
+                                      </div>
                                     </div>
-                                    <span className={`font-black text-base sm:text-lg sm:text-right w-fit px-3 py-1.5 rounded-lg border ${item.isPaid ? 'text-emerald-700 bg-emerald-100 border-emerald-200' : 'text-slate-600 bg-slate-50 border-slate-100'}`}>
-                                       R$ {item.parsedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+
+                                    <span className={`font-black text-base sm:text-lg sm:text-right w-fit px-3 py-1.5 rounded-lg border ${
+                                      item.type === 'expense' ? 'text-red-700 bg-red-50 border-red-100' : 
+                                      (item.isPaid ? 'text-emerald-700 bg-emerald-100 border-emerald-200' : 'text-slate-700 bg-slate-50 border-slate-200')
+                                    }`}>
+                                       {item.type === 'expense' ? '- ' : ''}R$ {item.parsedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                     </span>
                                  </div>
                               ))
@@ -769,7 +771,7 @@
               </div>
             )}
 
-            {/* --- MODAL CLIENTE --- */}
+            {}
             {isClientModalOpen && (
               <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-3 sm:p-4">
                 <div className="bg-white rounded-xl shadow-2xl w-full max-w-[95%] sm:max-w-3xl overflow-hidden flex flex-col max-h-[95vh]">
@@ -779,35 +781,28 @@
                   </div>
                   <form onSubmit={handleSaveClient} className="overflow-y-auto p-4 sm:p-6 flex-1 bg-white hide-scrollbar">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-                      
                       <div className="col-span-1 md:col-span-2">
                         <label className="block text-[10px] sm:text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Nome / Empresa *</label>
                         <input type="text" required className="w-full p-2.5 text-xs sm:text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" value={clientForm.name} onChange={e => setClientForm({...clientForm, name: e.target.value})} placeholder="Ex: Acme Corp" />
                       </div>
-                      
                       <div>
                         <label className="block text-[10px] sm:text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Tipo de Cliente</label>
                         <select className="w-full p-2.5 text-xs sm:text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white" value={clientForm.type} onChange={e => setClientForm({...clientForm, type: e.target.value})}>
-                          <option value="EM PROSPECÇÃO">Em Prospecção</option>
-                          <option value="PONTUAL">Pontual</option>
-                          <option value="PERIÓDICO">Periódico</option>
+                          <option value="EM PROSPECÇÃO">Em Prospecção</option><option value="PONTUAL">Pontual</option><option value="PERIÓDICO">Periódico</option>
                         </select>
                       </div>
-
                       <div>
                         <label className="block text-[10px] sm:text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Status</label>
                         <input type="text" className="w-full p-2.5 text-xs sm:text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" value={clientForm.status} onChange={e => setClientForm({...clientForm, status: e.target.value})} placeholder="Ex: Negociando..." />
                       </div>
-                      
                       <div className="col-span-1 md:col-span-2">
                         <label className="block text-[10px] sm:text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Serviço</label>
                         <textarea rows="2" className="w-full p-2.5 text-xs sm:text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" value={clientForm.service} onChange={e => setClientForm({...clientForm, service: e.target.value})} placeholder="Descreva os serviços..." />
                       </div>
                       
+                      {/* DADOS FINANCEIROS CLIENTE */}
                       <div className="col-span-1 md:col-span-2 p-3 sm:p-5 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
-                        <h4 className="text-sm font-black text-slate-700 border-b border-slate-200 pb-2 flex items-center">
-                          <DollarSign className="w-4 h-4 mr-1 text-emerald-600" /> Dados Financeiros
-                        </h4>
+                        <h4 className="text-sm font-black text-slate-700 border-b border-slate-200 pb-2 flex items-center"><DollarSign className="w-4 h-4 mr-1 text-emerald-600" /> Contrato e Base Financeira</h4>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
@@ -823,31 +818,22 @@
                         <div className="pt-3 border-t border-slate-200">
                           <label className="flex items-center cursor-pointer group mb-3 w-fit">
                             <input type="checkbox" className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer" checked={clientForm.isInstallment} onChange={e => setClientForm({...clientForm, isInstallment: e.target.checked})} />
-                            <span className="ml-2 text-xs sm:text-sm font-bold text-slate-700">Pagamentos / Parcelas Múltiplas?</span>
+                            <span className="ml-2 text-xs sm:text-sm font-bold text-slate-700">Pagamento Livre / Parcelado?</span>
                           </label>
 
                           {clientForm.isInstallment && (
                             <div className="space-y-3 bg-white p-3 sm:p-4 border border-blue-200 rounded-xl shadow-sm">
-                              <p className="text-[10px] sm:text-xs text-slate-500 font-medium">Você pode adicionar quantas parcelas/datas quiser.</p>
-                              
+                              <p className="text-[10px] sm:text-xs text-slate-500 font-medium">Adicione as datas exatas que o financeiro vai cobrar.</p>
                               {clientForm.installments && clientForm.installments.map((inst, index) => (
                                  <div key={inst.id} className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 bg-slate-50 p-2 sm:p-3 rounded-lg border border-slate-100">
                                     <span className="font-bold text-xs text-slate-400 w-6 shrink-0">{index + 1}.</span>
                                     <input type="date" className="w-full sm:flex-1 p-2 text-xs border border-slate-300 rounded focus:ring-2 focus:ring-indigo-500 bg-white" value={inst.date} onChange={e => updateInstallment(inst.id, 'date', e.target.value)} required />
                                     <input type="text" placeholder="R$ Valor Exato" className="w-full sm:flex-1 p-2 text-xs border border-slate-300 rounded focus:ring-2 focus:ring-indigo-500 bg-white" value={inst.value} onChange={e => updateInstallment(inst.id, 'value', e.target.value)} required />
-                                    
-                                    <label className="flex items-center cursor-pointer min-w-max bg-white px-2 py-1.5 border border-slate-200 rounded">
-                                       <input type="checkbox" className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer" checked={inst.isPaid || false} onChange={e => updateInstallment(inst.id, 'isPaid', e.target.checked)} />
-                                       <span className="ml-1.5 text-xs font-bold text-slate-700">Pago</span>
-                                    </label>
-
+                                    <label className="flex items-center cursor-pointer min-w-max bg-white px-2 py-1.5 border border-slate-200 rounded"><input type="checkbox" className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer" checked={inst.isPaid || false} onChange={e => updateInstallment(inst.id, 'isPaid', e.target.checked)} /><span className="ml-1.5 text-xs font-bold text-slate-700">Já Pago</span></label>
                                     <button type="button" onClick={() => removeInstallment(inst.id)} className="w-full sm:w-auto p-2 text-red-500 hover:bg-red-50 rounded-md transition-colors"><Trash2 className="w-4 h-4 mx-auto" /></button>
                                  </div>
                               ))}
-                              
-                              <button type="button" onClick={addInstallment} className="mt-2 w-full py-2 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded-lg transition-colors flex items-center justify-center">
-                                 <Plus className="w-3.5 h-3.5 mr-1" /> Adicionar Data/Parcela
-                              </button>
+                              <button type="button" onClick={addInstallment} className="mt-2 w-full py-2 text-xs font-bold text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded-lg transition-colors flex items-center justify-center"><Plus className="w-3.5 h-3.5 mr-1" /> Adicionar Data</button>
                             </div>
                           )}
                         </div>
@@ -857,65 +843,93 @@
                             <input type="checkbox" className="w-4 h-4 text-yellow-600 border-slate-300 rounded focus:ring-yellow-500 cursor-pointer" checked={clientForm.hasCommission} onChange={e => setClientForm({...clientForm, hasCommission: e.target.checked})} />
                             <span className="ml-2 text-xs sm:text-sm font-bold text-slate-700">Haverá pagamento de comissão?</span>
                           </label>
-                          
                           {clientForm.hasCommission && (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 p-3 sm:p-4 bg-yellow-50/50 border border-yellow-200 rounded-xl">
-                              <div>
-                                <label className="block text-[10px] sm:text-xs font-semibold text-yellow-800 uppercase tracking-wide mb-1">Comissionado:</label>
-                                <input type="text" className="w-full p-2 text-xs sm:text-sm border border-yellow-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 bg-white" value={clientForm.commissionTo} onChange={e => setClientForm({...clientForm, commissionTo: e.target.value})} placeholder="Nome" />
-                              </div>
-                              <div>
-                                <label className="block text-[10px] sm:text-xs font-semibold text-yellow-800 uppercase tracking-wide mb-1">Chave PIX:</label>
-                                <input type="text" className="w-full p-2 text-xs sm:text-sm border border-yellow-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 bg-white" value={clientForm.commissionPix} onChange={e => setClientForm({...clientForm, commissionPix: e.target.value})} placeholder="CPF/Telefone" />
-                              </div>
+                              <div><label className="block text-[10px] sm:text-xs font-semibold text-yellow-800 uppercase tracking-wide mb-1">Comissionado:</label><input type="text" className="w-full p-2 text-xs sm:text-sm border border-yellow-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 bg-white" value={clientForm.commissionTo} onChange={e => setClientForm({...clientForm, commissionTo: e.target.value})} placeholder="Nome" /></div>
+                              <div><label className="block text-[10px] sm:text-xs font-semibold text-yellow-800 uppercase tracking-wide mb-1">Chave PIX:</label><input type="text" className="w-full p-2 text-xs sm:text-sm border border-yellow-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 bg-white" value={clientForm.commissionPix} onChange={e => setClientForm({...clientForm, commissionPix: e.target.value})} placeholder="CPF/Telefone" /></div>
                             </div>
                           )}
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-[10px] sm:text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Local / Formato</label>
-                        <input type="text" className="w-full p-2.5 text-xs sm:text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" value={clientForm.location} onChange={e => setClientForm({...clientForm, location: e.target.value})} placeholder="Ex: São Paulo ou Online" />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-[10px] sm:text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Responsável Interno</label>
-                        <input type="text" className="w-full p-2.5 text-xs sm:text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" value={clientForm.responsible} onChange={e => setClientForm({...clientForm, responsible: e.target.value})} />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-[10px] sm:text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Contato do Cliente</label>
-                        <input type="text" className="w-full p-2.5 text-xs sm:text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" value={clientForm.contact} onChange={e => setClientForm({...clientForm, contact: e.target.value})} />
-                      </div>
-                      
-                      <div className="flex items-center pt-2 md:pt-6">
-                        <label className="flex items-center cursor-pointer group">
-                          <input type="checkbox" className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer" checked={clientForm.requiresTravel} onChange={e => setClientForm({...clientForm, requiresTravel: e.target.checked})} />
-                          <span className="ml-2 text-xs sm:text-sm font-medium text-slate-700">Necessita de Viagem?</span>
-                        </label>
-                      </div>
-                      
                       <div className="col-span-1 md:col-span-2">
                         <label className="block text-[10px] sm:text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Observações</label>
                         <textarea rows="2" className="w-full p-2.5 text-xs sm:text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" value={clientForm.notes} onChange={e => setClientForm({...clientForm, notes: e.target.value})} />
                       </div>
                     </div>
-
                     <div className="mt-6 sm:mt-8 pt-4 border-t border-slate-100 flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3">
                       <button type="button" onClick={() => setIsClientModalOpen(false)} className="w-full sm:w-auto px-5 py-2.5 text-xs sm:text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">Cancelar</button>
-                      <button type="submit" className="w-full sm:w-auto justify-center px-5 py-2.5 text-xs sm:text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center shadow-sm">
-                        <CheckCircle2 className="w-4 h-4 mr-2" /> Salvar Cliente
-                      </button>
+                      <button type="submit" className="w-full sm:w-auto justify-center px-5 py-2.5 text-xs sm:text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center shadow-sm"><CheckCircle2 className="w-4 h-4 mr-2" /> Salvar Cliente</button>
                     </div>
                   </form>
                 </div>
               </div>
             )}
+
+            {}
+            {isTransactionModalOpen && (
+              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[70] p-3 sm:p-4">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-[95%] sm:max-w-md overflow-hidden flex flex-col">
+                  <div className="flex items-center justify-between p-3 sm:p-4 border-b border-slate-100 bg-slate-50">
+                    <h3 className="font-bold text-sm sm:text-lg text-slate-800">Lançamento Avulso no Caixa</h3>
+                    <button onClick={() => setIsTransactionModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors p-1.5 rounded-full hover:bg-slate-200"><X className="w-5 h-5" /></button>
+                  </div>
+                  
+                  <form onSubmit={handleSaveTransaction} className="p-4 sm:p-5 space-y-4">
+                    
+                    <div className="flex gap-2 p-1 bg-slate-100 rounded-lg">
+                      <button type="button" onClick={() => setTransactionForm({...transactionForm, type: 'income'})} className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-md transition-colors ${transactionForm.type === 'income' ? 'bg-white text-emerald-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:bg-slate-200'}`}>+ Receita Extra</button>
+                      <button type="button" onClick={() => setTransactionForm({...transactionForm, type: 'expense'})} className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-md transition-colors ${transactionForm.type === 'expense' ? 'bg-white text-red-600 shadow-sm border border-slate-200' : 'text-slate-500 hover:bg-slate-200'}`}>- Desconto / Saída</button>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] sm:text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Descrição</label>
+                      <input type="text" required className="w-full p-2.5 text-xs sm:text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" value={transactionForm.description} onChange={e => setTransactionForm({...transactionForm, description: e.target.value})} placeholder={transactionForm.type === 'income' ? "Ex: Diária extra, Serviço Adicional..." : "Ex: Adiantamento, Consumo..."} />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] sm:text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Valor (R$)</label>
+                        <input type="text" required className="w-full p-2.5 text-xs sm:text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" value={transactionForm.value} onChange={e => setTransactionForm({...transactionForm, value: e.target.value})} placeholder="Ex: 350,00" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] sm:text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Data / Competência</label>
+                        <input type="date" required className="w-full p-2.5 text-xs sm:text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white" value={transactionForm.date} onChange={e => setTransactionForm({...transactionForm, date: e.target.value})} />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] sm:text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">Vincular a um Cliente (Opcional)</label>
+                      <select className="w-full p-2.5 text-xs sm:text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white" value={transactionForm.clientId} onChange={e => setTransactionForm({...transactionForm, clientId: e.target.value})}>
+                        <option value="">-- Lançamento Geral da Agência --</option>
+                        {clients.filter(c => c.type !== 'EM PROSPECÇÃO').map(c => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                      </select>
+                    </div>
+
+                    <div className="pt-2">
+                      <label className="flex items-center cursor-pointer p-3 border border-slate-200 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
+                        <input type="checkbox" className="w-5 h-5 text-indigo-600 border-slate-300 rounded cursor-pointer" checked={transactionForm.isPaid} onChange={e => setTransactionForm({...transactionForm, isPaid: e.target.checked})} />
+                        <div className="ml-3">
+                          <span className="block text-sm font-bold text-slate-700">{transactionForm.type === 'income' ? 'O valor já foi Recebido?' : 'O desconto/gasto já foi Realizado?'}</span>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div className="mt-6 pt-4 border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-2">
+                      <button type="button" onClick={() => setIsTransactionModalOpen(false)} className="w-full sm:w-auto px-5 py-2.5 text-xs sm:text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">Cancelar</button>
+                      <button type="submit" className="w-full sm:w-auto justify-center px-5 py-2.5 text-xs sm:text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-sm">Salvar Lançamento</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
       );
     }
 
+    // Inicialização do React
     const rootElement = document.getElementById('root');
     const root = createRoot(rootElement);
     root.render(<PlannerApp />);
